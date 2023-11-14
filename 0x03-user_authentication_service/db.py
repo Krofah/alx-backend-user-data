@@ -11,23 +11,20 @@ from sqlalchemy.exc import InvalidRequestError
 
 from user import Base, User
 
-
 class DB:
-    """DB class
+    """DB class for interacting with the database
     """
 
     def __init__(self) -> None:
-        """Initialize a new DB instance
+        """Initialize a new DB instance and create database tables if they do not exist
         """
-        self._engine = create_engine("sqlite:///a.db",
-                                     echo=False)
-        Base.metadata.drop_all(self._engine)
+        self._engine = create_engine("sqlite:///a.db", echo=False)
         Base.metadata.create_all(self._engine)
         self.__session = None
 
     @property
     def _session(self) -> Session:
-        """Memoized session object
+        """Memoized session object for interacting with the database
         """
         if self.__session is None:
             DBSession = sessionmaker(bind=self._engine)
@@ -50,40 +47,31 @@ class DB:
 
     def find_user_by(self, **kwargs) -> User:
         """
-        Return a user who has an attribute matching the attributes passed
-        as arguments
+        Return a user who has an attribute matching the attributes passed as arguments
         Args:
-            attributes (dict): a dictionary of attributes to match the user
+            kwargs (dict): a dictionary of attributes to match the user
         Return:
-            matching user or raise error
+            matching user or raise NoResultFound error
         """
-        all_users = self._session.query(User)
-        for k, v in kwargs.items():
-            if k not in User.__dict__:
-                raise InvalidRequestError
-            for usr in all_users:
-                if getattr(usr, k) == v:
-                    return usr
-        raise NoResultFound
+        try:
+            user = self._session.query(User).filter_by(**kwargs).one()
+            return user
+        except NoResultFound:
+            raise NoResultFound("No user found with the specified attributes")
 
     def update_user(self, user_id: int, **kwargs) -> None:
         """
         Update a user's attributes
         Args:
             user_id (int): user's id
-            kwargs (dict): dict of key, value pairs representing the
-                           attributes to update and the values to update
-                           them with
+            kwargs (dict): dict of key, value pairs representing the attributes to update and the values to update them with
         Return:
             No return value
         """
         try:
-            usr = self.find_user_by(id=user_id)
+            user = self._session.query(User).filter_by(id=user_id).one()
+            for attr, value in kwargs.items():
+                setattr(user, attr, value)
+            self._session.commit()
         except NoResultFound:
-            raise ValueError()
-        for k, v in kwargs.items():
-            if hasattr(usr, k):
-                setattr(usr, k, v)
-            else:
-                raise ValueError
-        self._session.commit()
+            raise ValueError("No user found with the specified user_id")
